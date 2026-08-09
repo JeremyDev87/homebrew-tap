@@ -1,0 +1,49 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homebrew-tap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  formula:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # main, 2026-07-20
+      - uses: Homebrew/actions/setup-homebrew@c8707045ccae42888fe98e86f2ee8938bc7cc193 # main, 2026-08-07
+        with:
+          core: true
+      - name: Validate formula style
+        run: brew style --formula JeremyDev87/tap/local-wiki-librarian
+      - name: Audit formula
+        run: brew audit --strict --new --online JeremyDev87/tap/local-wiki-librarian
+      - name: Install from source
+        env:
+          HOMEBREW_NO_INSTALL_FROM_API: "1"
+        run: brew install --build-from-source JeremyDev87/tap/local-wiki-librarian
+      - name: Run functional test
+        run: brew test local-wiki-librarian
+      - name: Verify linkage
+        run: brew linkage --test local-wiki-librarian
+      - name: Uninstall
+        run: |
+          brew uninstall local-wiki-librarian
+          test ! -e "$(brew --prefix)/bin/wiki-librarian"
+          test ! -e "$(brew --prefix)/bin/wiki-librarian-refresh"
+      - name: Reinstall and retest
+        env:
+          HOMEBREW_NO_INSTALL_FROM_API: "1"
+        run: |
+          brew install --build-from-source JeremyDev87/tap/local-wiki-librarian
+          brew test local-wiki-librarian
